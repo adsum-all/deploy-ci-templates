@@ -1,18 +1,17 @@
 # Reusable Docker build and push to the GitLab container registry, using the
-# official Docker engine with Docker-in-Docker on the self-hosted group runner
-# (tag: docker). This mirrors the working configuration of the moodle project on
-# the same runner type.
+# official Docker engine with Docker-in-Docker on the GitLab.com SaaS runners.
 #
-# Root cause of earlier failures and the fix:
-#  - The self-hosted runner is a Docker executor preconfigured for TLS dind on
-#    tcp://docker:2376. Overriding DOCKER_HOST or disabling TLS broke it; the
-#    shared SaaS runners do not run a privileged dind at all.
-#  - The fix is the standard dind config (services docker:dind plus
-#    DOCKER_TLS_CERTDIR=/certs, no override) and targeting the runner via the
-#    'docker' tag. The docker client and the runner auto negotiate the daemon.
+# Root cause of earlier failures and the fix (verified):
+#  - The adsum group has a self-hosted runner (sr-media-runner-prod-01) with
+#    run_untagged = true and privileged = false. It intercepted the untagged
+#    Docker jobs, and without privileged its dind daemon never started.
+#  - The SaaS shared runners DO support dind (the moodle project builds on
+#    saas-linux-small-amd64 successfully). Pinning the build jobs to that SaaS
+#    runner tag avoids the self-hosted runner and runs dind where it works.
+#  - This is the moodle configuration, with an explicit SaaS tag so the
+#    self-hosted runner does not grab the job. No runner change is needed.
 #
-# The image produced is portable (GitLab registry) and can be deployed on any
-# target (Vercel, any VM); nothing is locked to one provider.
+# The image is portable (GitLab registry) and deployable on any target.
 #
 # The including repo must define a 'build' stage and may set:
 #   DOCKERFILE_PATH  (default deploy/Dockerfile)
@@ -22,7 +21,7 @@
   services:
     - docker:27-dind
   tags:
-    - docker
+    - saas-linux-small-amd64
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKERFILE_PATH: "deploy/Dockerfile"
