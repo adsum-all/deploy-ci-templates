@@ -1,10 +1,14 @@
 # Reusable Docker build and push to the GitLab container registry, using the
-# official Docker engine (docker build) with Docker-in-Docker.
+# official Docker engine (docker build) with Docker-in-Docker on the default
+# GitLab.com shared runners.
 #
-# Root cause of earlier failures: without a tag, GitLab scheduled the job on a
-# default shared runner that does not run the privileged dind service, so the
-# daemon never came up. The shared runners dedicated to Docker carry the
-# 'gitlab-org-docker' tag; targeting them makes the official Docker engine work.
+# Root cause of earlier failures and the fix:
+#  - With a runner tag (gitlab-org-docker) no runner picked up the job (those
+#    runners are reserved), so jobs failed with no runner.
+#  - On the default shared runners the dind service must be started explicitly
+#    in non-TLS mode, otherwise the daemon was never reachable. The service
+#    command ["--tls=false"] plus DOCKER_HOST tcp://docker:2375 makes the
+#    official Docker engine work without tags and without TLS cert sharing.
 #
 # The including repo must define a 'build' stage and may set:
 #   DOCKERFILE_PATH  (default deploy/Dockerfile)
@@ -16,12 +20,12 @@
 .docker:
   image: docker:27
   services:
-    - docker:27-dind
-  tags:
-    - gitlab-org-docker
+    - name: docker:27-dind
+      command: ["--tls=false"]
   variables:
     DOCKERFILE_PATH: "deploy/Dockerfile"
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
   before_script:
     - for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; echo "waiting for docker daemon $i/30"; sleep 2; done
     - docker info >/dev/null 2>&1 || { echo "docker daemon not reachable"; exit 1; }
