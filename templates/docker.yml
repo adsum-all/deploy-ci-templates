@@ -1,0 +1,52 @@
+# Reusable Docker build and push to the GitLab container registry, built with
+# Kaniko (no Docker daemon, no privileged runner). Reliable on SaaS runners.
+#
+# The including repository must define a 'build' stage and may set:
+#   DOCKERFILE_PATH  (default deploy/Dockerfile)
+#
+# Tags pushed:
+#   dev:<sha>, dev:latest    on the develop branch
+#   prod:X.Y.Z, prod:latest  on a tag vX.Y.Z (built from main history)
+
+.kaniko:
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  variables:
+    DOCKERFILE_PATH: "deploy/Dockerfile"
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"username\":\"${CI_REGISTRY_USER}\",\"password\":\"${CI_REGISTRY_PASSWORD}\"}}}" > /kaniko/.docker/config.json
+
+build:dev:
+  extends: .kaniko
+  stage: build
+  script:
+    - >-
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/${DOCKERFILE_PATH}"
+      --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      --build-arg VERSION="dev-${CI_COMMIT_SHORT_SHA}"
+      --build-arg VCS_REF="${CI_COMMIT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}/dev:${CI_COMMIT_SHORT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}/dev:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+build:prod:
+  extends: .kaniko
+  stage: build
+  script:
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - >-
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/${DOCKERFILE_PATH}"
+      --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      --build-arg VERSION="${VERSION}"
+      --build-arg VCS_REF="${CI_COMMIT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}/prod:${VERSION}"
+      --destination "${CI_REGISTRY_IMAGE}/prod:latest"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
