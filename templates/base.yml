@@ -31,3 +31,27 @@ audit:constitution:
       echo "Constitution audit passed."
   rules:
     - if: '$CI_COMMIT_BRANCH'
+
+# Control G / I10: no secret in clear in the repository.
+audit:secrets:
+  stage: audit
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --no-banner --redact --exit-code 1
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+# Control D / I5: zero code duplication. Runs only when source files exist.
+audit:duplication:
+  stage: quality
+  image: node:20-alpine
+  script:
+    - npx --yes jscpd@4 --min-tokens 70 --threshold 0 --reporters consoleFull
+        --ignore "**/node_modules/**,**/.git/**,**/tests/**,**/migrations/**,**/.venv/**" .
+  rules:
+    - exists:
+        - "**/*.ts"
+        - "**/*.tsx"
+        - "**/*.py"
