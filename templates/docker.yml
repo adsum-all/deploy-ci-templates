@@ -2,16 +2,10 @@
 # official Docker engine with Docker-in-Docker on the self-hosted group runner
 # (tag: docker), which is attached to the whole sr-media-ai/adsum group.
 #
-# Verified facts:
-#  - The group runner sr-media-runner-prod-01 runs validate, test and security
-#    successfully, and it already built and pushed an image. It is healthy.
-#  - Official dind requires privileged = true on the runner. The runner is
-#    currently privileged = false, so only the dind build fails on it.
-#  - The SaaS shared runners would work, but the sr-media-ai group has exhausted
-#    its free CI minutes (ci_quota_exceeded), so jobs must use this group runner.
-#
-# Action needed once: set privileged = true on the group runner config, then this
-# build goes green. The image is portable and deployable on any target.
+# The runner sr-media-runner-prod-01 runs every stage (validate, test, security,
+# build) and has privileged = true, which official dind requires. Builds run on
+# this group runner, not on the SaaS shared runners, so they consume no SaaS CI
+# minutes. The resulting image is portable and deployable on any target.
 #
 # The including repo must define a 'build' stage and may set:
 #   DOCKERFILE_PATH  (default deploy/Dockerfile)
