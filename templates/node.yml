@@ -1,0 +1,35 @@
+# ADSUM CI - Node / TypeScript stack. Extends the Constitution audit.
+include:
+  - project: 'sr-media-ai/adsum/deployment/ci-templates'
+    ref: main
+    file: '/templates/base.yml'
+
+node:lint:
+  stage: quality
+  image: node:20-alpine
+  script:
+    - npm ci
+    - npm run lint --if-present
+  rules:
+    - exists:
+        - package.json
+
+node:test:
+  stage: test
+  image: node:20-alpine
+  script:
+    - npm ci
+    - npm test --if-present
+  rules:
+    - exists:
+        - package.json
+
+node:build:
+  stage: build
+  image: node:20-alpine
+  script:
+    - npm ci
+    - npm run build --if-present
+  rules:
+    - exists:
+        - package.json

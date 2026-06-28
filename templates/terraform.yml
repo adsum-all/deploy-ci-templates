@@ -1,0 +1,18 @@
+# ADSUM CI - Terraform (infrastructure). Extends the Constitution audit.
+include:
+  - project: 'sr-media-ai/adsum/deployment/ci-templates'
+    ref: main
+    file: '/templates/base.yml'
+
+tf:validate:
+  stage: quality
+  image:
+    name: hashicorp/terraform:1.9
+    entrypoint: [""]
+  script:
+    - terraform fmt -check -recursive
+    - terraform init -backend=false
+    - terraform validate
+  rules:
+    - exists:
+        - "**/*.tf"

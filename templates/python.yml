@@ -1,0 +1,27 @@
+# ADSUM CI - Python stack (FastAPI, workers, gateway, database). Extends the audit.
+include:
+  - project: 'sr-media-ai/adsum/deployment/ci-templates'
+    ref: main
+    file: '/templates/base.yml'
+
+py:lint:
+  stage: quality
+  image: python:3.11-slim
+  script:
+    - pip install --quiet ruff
+    - ruff check .
+  rules:
+    - exists:
+        - pyproject.toml
+        - requirements.txt
+
+py:test:
+  stage: test
+  image: python:3.11-slim
+  script:
+    - pip install --quiet -r requirements.txt 2>/dev/null || true
+    - pip install --quiet pytest
+    - pytest -q
+  rules:
+    - exists:
+        - tests/**/*.py

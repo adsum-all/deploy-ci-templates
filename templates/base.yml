@@ -1,0 +1,33 @@
+# ADSUM shared CI - Constitution audit (PLAYBOOK section 1, I1 to I11).
+# Included by every repository. Runs on a minimal image, no project tooling needed.
+stages:
+  - audit
+  - quality
+  - test
+  - build
+
+audit:constitution:
+  stage: audit
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache grep findutils coreutils >/dev/null
+  script:
+    - |
+      set -eu
+      EM=$(printf '\xe2\x80\x94'); EN=$(printf '\xe2\x80\x93')
+      echo "Checking em-dash (U+2014) and en-dash (U+2013)..."
+      if grep -rlF "$EM" --exclude-dir=.git . 2>/dev/null; then echo "FAIL: em-dash found"; exit 1; fi
+      if grep -rlF "$EN" --exclude-dir=.git . 2>/dev/null; then echo "FAIL: en-dash found"; exit 1; fi
+      echo "Checking for mock or fake data markers in source..."
+      if grep -rniE "(mock|fake|dummy)[_-]?(data|user|users)|faker\\b" \
+           --include='*.ts' --include='*.tsx' --include='*.py' \
+           --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=tests . 2>/dev/null; then
+        echo "FAIL: possible mock or fake data in source (allowed only under tests/)"; exit 1; fi
+      echo "Checking file size (max 500 lines)..."
+      BIG=$(find . -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.py' -o -name '*.js' \) \
+             -not -path '*/.git/*' -not -path '*/node_modules/*' \
+             -exec wc -l {} + 2>/dev/null | awk '$1>500 && $2!="total"{print $2" ("$1")"}')
+      if [ -n "$BIG" ]; then echo "FAIL: files over 500 lines:"; echo "$BIG"; exit 1; fi
+      echo "Constitution audit passed."
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
