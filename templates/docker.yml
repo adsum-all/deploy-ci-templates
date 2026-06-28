@@ -1,17 +1,17 @@
 # Reusable Docker build and push to the GitLab container registry, using the
-# official Docker engine with Docker-in-Docker on the GitLab.com SaaS runners.
+# official Docker engine with Docker-in-Docker on the self-hosted group runner
+# (tag: docker), which is attached to the whole sr-media-ai/adsum group.
 #
-# Root cause of earlier failures and the fix (verified):
-#  - The adsum group has a self-hosted runner (sr-media-runner-prod-01) with
-#    run_untagged = true and privileged = false. It intercepted the untagged
-#    Docker jobs, and without privileged its dind daemon never started.
-#  - The SaaS shared runners DO support dind (the moodle project builds on
-#    saas-linux-small-amd64 successfully). Pinning the build jobs to that SaaS
-#    runner tag avoids the self-hosted runner and runs dind where it works.
-#  - This is the moodle configuration, with an explicit SaaS tag so the
-#    self-hosted runner does not grab the job. No runner change is needed.
+# Verified facts:
+#  - The group runner sr-media-runner-prod-01 runs validate, test and security
+#    successfully, and it already built and pushed an image. It is healthy.
+#  - Official dind requires privileged = true on the runner. The runner is
+#    currently privileged = false, so only the dind build fails on it.
+#  - The SaaS shared runners would work, but the sr-media-ai group has exhausted
+#    its free CI minutes (ci_quota_exceeded), so jobs must use this group runner.
 #
-# The image is portable (GitLab registry) and deployable on any target.
+# Action needed once: set privileged = true on the group runner config, then this
+# build goes green. The image is portable and deployable on any target.
 #
 # The including repo must define a 'build' stage and may set:
 #   DOCKERFILE_PATH  (default deploy/Dockerfile)
@@ -21,7 +21,7 @@
   services:
     - docker:27-dind
   tags:
-    - saas-linux-small-amd64
+    - docker
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKERFILE_PATH: "deploy/Dockerfile"
