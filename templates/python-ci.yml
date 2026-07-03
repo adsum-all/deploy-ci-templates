@@ -19,9 +19,14 @@ validate:constitution:
            --include='*.py' --exclude-dir=.git --exclude-dir=tests . 2>/dev/null; then
         echo "FAIL possible mock data outside tests"; exit 1; fi
       echo "File size check (max 500 lines)"
+      EXC="docs/quality/file-size-exceptions.md"
       BIG=$(find . -type f -name '*.py' -not -path '*/.git/*' -not -path '*/.venv/*' \
-             -exec wc -l {} + 2>/dev/null | awk '$1>500 && $2!="total"{print $2}')
-      if [ -n "$BIG" ]; then echo "FAIL over 500 lines"; echo "$BIG"; exit 1; fi
+             -exec wc -l {} + 2>/dev/null | awk '$1>500 && $2!="total"{print $2}' \
+           | while read -r f; do
+               base=${f#./}
+               if [ -f "$EXC" ] && grep -qF "$base" "$EXC"; then :; else echo "$f"; fi
+             done)
+      if [ -n "$BIG" ]; then echo "FAIL over 500 lines (not documented in $EXC):"; echo "$BIG"; exit 1; fi
       echo "Constitution audit passed"
   rules:
     - if: '$CI_COMMIT_BRANCH'

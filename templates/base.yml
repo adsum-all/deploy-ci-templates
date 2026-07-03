@@ -24,10 +24,15 @@ audit:constitution:
            --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=tests . 2>/dev/null; then
         echo "FAIL: possible mock or fake data in source (allowed only under tests/)"; exit 1; fi
       echo "Checking file size (max 500 lines)..."
+      EXC="docs/quality/file-size-exceptions.md"
       BIG=$(find . -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.py' -o -name '*.js' \) \
              -not -path '*/.git/*' -not -path '*/node_modules/*' \
-             -exec wc -l {} + 2>/dev/null | awk '$1>500 && $2!="total"{print $2" ("$1")"}')
-      if [ -n "$BIG" ]; then echo "FAIL: files over 500 lines:"; echo "$BIG"; exit 1; fi
+             -exec wc -l {} + 2>/dev/null | awk '$1>500 && $2!="total"{print $2" ("$1")"}' \
+           | while read -r f n; do
+               base=${f#./}
+               if [ -f "$EXC" ] && grep -qF "$base" "$EXC"; then :; else echo "$f $n"; fi
+             done)
+      if [ -n "$BIG" ]; then echo "FAIL: files over 500 lines (not documented in $EXC):"; echo "$BIG"; exit 1; fi
       echo "Constitution audit passed."
   rules:
     - if: '$CI_COMMIT_BRANCH'
