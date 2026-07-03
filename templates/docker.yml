@@ -1,0 +1,60 @@
+# Reusable Docker build and push to the GitLab container registry, using the
+# official Docker engine with Docker-in-Docker on the self-hosted group runner
+# (tag: docker), which is attached to the whole sr-media-ai/adsum group.
+#
+# The runner sr-media-runner-prod-01 runs every stage (validate, test, security,
+# build) and has privileged = true, which official dind requires. Builds run on
+# this group runner, not on the SaaS shared runners, so they consume no SaaS CI
+# minutes. The resulting image is portable and deployable on any target.
+#
+# The including repo must define a 'build' stage and may set:
+#   DOCKERFILE_PATH  (default deploy/Dockerfile)
+
+.docker:
+  image: docker:27
+  services:
+    - docker:27-dind
+  tags:
+    - docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKERFILE_PATH: "deploy/Dockerfile"
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+
+build:dev:
+  extends: .docker
+  stage: build
+  script:
+    - >-
+      docker build
+      --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      --build-arg VERSION="dev-${CI_COMMIT_SHORT_SHA}"
+      --build-arg VCS_REF="${CI_COMMIT_SHA}"
+      -f "${DOCKERFILE_PATH}"
+      -t "${CI_REGISTRY_IMAGE}/dev:${CI_COMMIT_SHORT_SHA}"
+      -t "${CI_REGISTRY_IMAGE}/dev:latest"
+      .
+    - docker push "${CI_REGISTRY_IMAGE}/dev:${CI_COMMIT_SHORT_SHA}"
+    - docker push "${CI_REGISTRY_IMAGE}/dev:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+build:prod:
+  extends: .docker
+  stage: build
+  script:
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - >-
+      docker build
+      --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      --build-arg VERSION="${VERSION}"
+      --build-arg VCS_REF="${CI_COMMIT_SHA}"
+      -f "${DOCKERFILE_PATH}"
+      -t "${CI_REGISTRY_IMAGE}/prod:${VERSION}"
+      -t "${CI_REGISTRY_IMAGE}/prod:latest"
+      .
+    - docker push "${CI_REGISTRY_IMAGE}/prod:${VERSION}"
+    - docker push "${CI_REGISTRY_IMAGE}/prod:latest"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
