@@ -1,0 +1,31 @@
+# Continuous deployment for the ADSUM web apps: the Vercel API and the Cloudflare
+# Pages front. Opt-in per repo through protected + masked CI/CD variables, so a
+# repo that does not set them simply skips these jobs (no impact on the others).
+#
+# Required CI/CD variables (Settings > CI/CD > Variables, protected + masked):
+#   Vercel API repo   : VERCEL_TOKEN            (repo also holds .vercel/project.json)
+#   Cloudflare front  : CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CF_PAGES_PROJECT
+#
+# The including repo must declare a 'deploy' stage. Runs on develop after build.
+
+deploy:vercel:
+  stage: deploy
+  image: node:20-alpine
+  script:
+    - npx --yes vercel@latest deploy --prod --token="$VERCEL_TOKEN" --yes
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" && $VERCEL_TOKEN'
+      exists:
+        - vercel.json
+
+deploy:cloudflare:
+  stage: deploy
+  image: node:20-alpine
+  script:
+    - npm ci
+    - npm run build
+    - npx --yes wrangler pages deploy dist --project-name="$CF_PAGES_PROJECT" --branch=main --commit-dirty=true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CF_PAGES_PROJECT && $CLOUDFLARE_API_TOKEN'
+      exists:
+        - package.json
