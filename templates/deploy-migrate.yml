@@ -1,0 +1,19 @@
+# Continuous deployment of the ADSUM database schema (Alembic). Opt-in through the
+# protected + masked CI/CD variable ADSUM_DATABASE_URL (the Supabase pooler DSN).
+#
+# A production schema migration is a deliberate release step (Constitution: no
+# manual prod schema change; every change is a versioned migration applied on
+# purpose), so this job is MANUAL: it appears on the develop pipeline and a human
+# starts it. It never runs automatically.
+
+deploy:migrate:
+  stage: deploy
+  image: python:3.13-slim
+  variables:
+    DATABASE_URL: "$ADSUM_DATABASE_URL"
+  script:
+    - pip install --no-cache-dir alembic "psycopg[binary]"
+    - alembic upgrade head
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" && $ADSUM_DATABASE_URL'
+      when: manual
