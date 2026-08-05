@@ -6,8 +6,21 @@ security:gitleaks:
   image:
     name: zricethezav/gitleaks:latest
     entrypoint: [""]
+  # --verbose so a finding says which rule, which file and which line. Without it
+  # the job printed "leaks found: 1" and stopped there: whoever had to act on it
+  # could not tell a real key from a documented example, and the only way to find
+  # out was to run the scanner by hand. A gate nobody can act on gets bypassed.
+  #
+  # --redact stays: the value itself never reaches the log, which is the whole point
+  # of scanning for it. The report is kept as an artifact so a finding can be read
+  # after the log has rotated.
   script:
-    - gitleaks detect --source . --no-banner --redact --exit-code 1
+    - gitleaks detect --source . --no-banner --redact --verbose --exit-code 1 --report-format json --report-path gitleaks-report.json
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gitleaks-report.json
   rules:
     - if: '$CI_COMMIT_BRANCH'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
