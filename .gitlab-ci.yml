@@ -16,3 +16,14 @@ include:
   # Les deux politiques d'accès vivent ici : c'est donc ici que leur forme, leur
   # cohérence et la disjonction des deux mondes sont vérifiées.
   - local: '/templates/policies.yml'
+
+# Ce dépôt est consommé par une trentaine de projets. Une erreur de gabarit ne se
+# voit pas ici mais chez eux, sous forme d'un pipeline sans aucune tâche. Ce contrôle
+# est donc le plus important du dépôt.
+gabarits:verifier:
+  stage: validate
+  image: python:3.11-slim
+  before_script:
+    - pip install --quiet pyyaml
+  script:
+    - python outils/verifier_gabarits.py

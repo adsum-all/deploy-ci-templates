@@ -1,0 +1,52 @@
+# Point d'entrée CI pour un dépôt de documentation ADSUM.
+#
+# Volontairement léger. Une documentation n'a ni build ni test, mais elle a deux
+# risques réels : un secret collé dans un exemple, et des liens internes morts qui
+# font perdre plus de temps qu'une page absente.
+#
+# Usage :
+#
+#   include:
+#     - project: 'sr-media-ai/adsum/deployment/ci-templates'
+#       ref: main
+#       file: '/templates/stack-docs.yml'
+
+include:
+  - project: 'sr-media-ai/adsum/deployment/ci-templates'
+    ref: main
+    file:
+      - '/templates/base.yml'
+      - '/templates/security.yml'
+
+validate:liens-internes:
+  stage: validate
+  image: alpine:3.20
+  allow_failure: true
+  before_script:
+    - apk add --no-cache grep coreutils findutils >/dev/null
+  script:
+    # Ne vérifie que les liens relatifs vers des fichiers du dépôt. Les liens
+    # externes ne sont pas suivis : une page tierce momentanément indisponible
+    # ferait rougir le pipeline pour une raison qui n'appartient pas au dépôt.
+    - |
+      set -eu
+      MORTS=""
+      for f in $(find . -name '*.md' -not -path './.git/*'); do
+        d=$(dirname "$f")
+        for cible in $(grep -oE '\]\(([^)#:]+\.md)' "$f" 2>/dev/null | sed 's/^](//' || true); do
+          [ -f "$d/$cible" ] || MORTS="$MORTS\n  $f -> $cible"
+        done
+      done
+      if [ -n "$MORTS" ]; then printf "Liens internes morts :%b\n" "$MORTS"; exit 1; fi
+      echo "Tous les liens internes pointent sur un fichier existant."
+  rules:
+    - exists: ['**/*.md']
+
+validate:markdown:
+  stage: validate
+  image: node:20-alpine
+  allow_failure: true
+  script:
+    - npx --yes markdownlint-cli2 "**/*.md" "#node_modules" || true
+  rules:
+    - exists: ['**/*.md']

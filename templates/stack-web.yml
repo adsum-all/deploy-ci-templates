@@ -1,0 +1,71 @@
+# Point d'entrée CI pour une application web ADSUM (React, Vite, TypeScript).
+#
+# Un dépôt qui l'inclut n'a rien d'autre à écrire. C'est le but : la veille où l'on
+# ajoute un contrôle de sécurité, il doit suffire de le poser ici pour que les huit
+# applications web en bénéficient, sans huit demandes de fusion.
+#
+# Usage, dans le .gitlab-ci.yml du dépôt :
+#
+#   include:
+#     - project: 'sr-media-ai/adsum/deployment/ci-templates'
+#       ref: main
+#       file: '/templates/stack-web.yml'
+
+include:
+  - project: 'sr-media-ai/adsum/deployment/ci-templates'
+    ref: main
+    file:
+      - '/templates/base.yml'
+      - '/templates/security.yml'
+
+.web:
+  image: node:20-alpine
+  interruptible: true
+  # Le cache porte sur le cache npm et non sur node_modules : `npm ci` efface
+  # node_modules de toute façon, mettre le dossier en cache ne ferait que déplacer
+  # le temps de l'installation vers le transfert du cache.
+  cache:
+    key:
+      files: [package-lock.json]
+    paths: [.npm]
+    policy: pull-push
+  before_script:
+    - npm ci --cache .npm --prefer-offline --no-fund --no-audit
+
+validate:manifeste:
+  stage: validate
+  image: node:20-alpine
+  script:
+    # Un package.json invalide fait échouer chaque tâche suivante avec un message
+    # obscur. Le dire ici coûte dix secondes et évite de chercher ailleurs.
+    - node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
+    - test -f package-lock.json || (echo "FAIL: package-lock.json absent, l'installation ne serait pas reproductible"; exit 1)
+  rules:
+    - exists: [package.json]
+
+quality:types:
+  extends: .web
+  stage: quality
+  script:
+    - npm run lint --if-present
+  rules:
+    - exists: [package.json]
+
+test:unitaires:
+  extends: .web
+  stage: test
+  script:
+    - npm test --if-present
+  rules:
+    - exists: [package.json]
+
+build:application:
+  extends: .web
+  stage: build
+  script:
+    - npm run build --if-present
+  artifacts:
+    expire_in: 7 days
+    paths: [dist]
+  rules:
+    - exists: [package.json]

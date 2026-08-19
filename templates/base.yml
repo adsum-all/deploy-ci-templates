@@ -1,10 +1,64 @@
-# ADSUM shared CI - Constitution audit (PLAYBOOK section 1, I1 to I11).
-# Included by every repository. Runs on a minimal image, no project tooling needed.
+# Socle CI partagé ADSUM. Inclus par tous les dépôts, quelle que soit leur pile.
+#
+# Il pose trois choses et rien d'autre : les étapes, les règles de déclenchement du
+# pipeline, et l'audit de Constitution. Tout le reste vit dans des gabarits de pile,
+# pour qu'un dépôt de documentation n'hérite pas des tâches d'un service Python.
+#
+# Les étapes sont déclarées ici pour tout le monde, y compris celles qu'un dépôt
+# donné n'utilisera jamais. Une étape vide ne coûte rien ; une étape manquante fait
+# échouer le chargement de la configuration chez le premier dépôt qui l'utilise, et
+# la panne se lit alors comme un problème de pipeline plutôt que d'inclusion.
+
 stages:
-  - audit
-  - quality
-  - test
-  - build
+  - audit         # Constitution : ce qui vaut pour tout ADSUM, quelle que soit la pile
+  - validate      # syntaxe, schémas, manifestes, variables requises
+  - quality       # lint, format, types, analyse statique
+  - security      # secrets, SAST, dépendances, licences, images, infrastructure
+  - test          # unitaires, intégration, contrats, bout en bout
+  - build         # compilation, artefacts, images
+  - package       # publication de paquets et d'images, SBOM, attestation
+  # Étape historique, conservée pour les gabarits deploy-gcp, deploy-web et
+  # deploy-migrate qui la citent déjà sur main. La retirer aurait fait échouer le
+  # chargement de la configuration de tous les dépôts qui les incluent, pour un
+  # simple renommage. Les nouveaux déploiements utilisent les trois étapes ci-dessous.
+  - deploy
+  - deploy-review # environnements éphémères de relecture
+  - deploy-staging
+  - deploy-production
+
+# Un seul pipeline par changement. Sans cette règle, GitLab en lance deux quand une
+# branche a une demande de fusion ouverte : l'un sur la branche, l'autre sur la
+# fusion. Deux fois le temps, deux fois les minutes, et deux verdicts à réconcilier.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+default:
+  # Une tâche rendue obsolète par un nouveau commit est arrêtée. C'est la première
+  # source de minutes gaspillées sur une branche où l'on pousse souvent.
+  interruptible: true
+  timeout: 30 minutes
+  retry:
+    max: 2
+    # Uniquement les échecs qui ne disent rien du code. Réessayer un test rouge
+    # transformerait un défaut intermittent en défaut invisible.
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
+
+variables:
+  # Clone superficiel : l'historique complet ne sert à aucune tâche de vérification,
+  # et le dépôt adsum-api compte plusieurs centaines de commits.
+  GIT_DEPTH: "50"
+  # Les tâches ne doivent jamais dépendre d'un cache pour être correctes. Le cache
+  # accélère, il ne décide pas.
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
 
 audit:constitution:
   stage: audit
@@ -34,5 +88,3 @@ audit:constitution:
              done)
       if [ -n "$BIG" ]; then echo "FAIL: files over 500 lines (not documented in $EXC):"; echo "$BIG"; exit 1; fi
       echo "Constitution audit passed."
-  rules:
-    - if: '$CI_COMMIT_BRANCH'
