@@ -15,11 +15,6 @@
 # Les deux autres tournent dans chaque dépôt qui applique la politique, et n'ont donc
 # de sens que là où un test de conformité existe.
 
-include:
-  - project: 'sr-media-ai/adsum/deployment/ci-templates'
-    ref: main
-    file: '/templates/base.yml'
-
 variables:
   # Où vit l'exemplaire faisant foi. Un dépôt consommateur le récupère plutôt que d'en
   # garder une copie : deux copies divergent, et c'est la copie oubliée qui sert de

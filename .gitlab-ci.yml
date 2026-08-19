@@ -1,10 +1,18 @@
-# Minimal pipeline for ADSUM. Delegates to the shared CI templates in
-# sr-media-ai/adsum/deployment/ci-templates (Constitution audit and stack jobs).
+# Pipeline du dépôt qui héberge les gabarits ADSUM.
+#
+# Il s'inclut lui-même par `local:` et non par `project: ... ref: main`. La nuance
+# n'est pas cosmétique : avec la forme distante, un gabarit nouveau n'existe pas
+# encore sur `main` au moment où sa propre branche est testée, l'inclusion échoue, et
+# le pipeline tombe sans créer la moindre tâche. C'est exactement ce qui s'est produit
+# en ajoutant policies.yml : trois pipelines rouges, zéro tâche, aucune trace de la
+# cause ailleurs que dans le chargement de la configuration.
+#
+# `local:` prend le fichier de la révision testée. C'est aussi la seule forme qui
+# vérifie réellement ce que la branche propose, plutôt que ce que `main` contient
+# déjà. Les autres dépôts continuent, eux, de pointer sur `main` : ils consomment une
+# version publiée, pas une version en cours d'écriture.
 include:
-  - project: 'sr-media-ai/adsum/deployment/ci-templates'
-    ref: main
-    file:
-      - '/templates/base.yml'
-      # Les deux politiques d'acces vivent ici : c'est donc ici que leur
-      # forme, leur coherence et la disjonction des deux mondes sont verifiees.
-      - '/templates/policies.yml'
+  - local: '/templates/base.yml'
+  # Les deux politiques d'accès vivent ici : c'est donc ici que leur forme, leur
+  # cohérence et la disjonction des deux mondes sont vérifiées.
+  - local: '/templates/policies.yml'
