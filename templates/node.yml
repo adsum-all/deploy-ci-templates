@@ -1,8 +1,18 @@
 # ADSUM CI - Node / TypeScript stack. Extends the Constitution audit.
+# Inclusions locales : elles se résolvent dans ce dépôt, à la révision que le
+# consommateur demande par son propre « ref ». Les pointer sur « main » figeait le
+# socle à la version publiée, si bien qu'un gabarit et son socle pouvaient diverger
+# d'une étape.
+#
+# La chaîne de sécurité est branchée ICI plutôt que dans chacun des dépôts. Vingt
+# quatre dépôts ADSUM consomment ce gabarit sans aucun scan : ni détection de
+# secrets, ni audit de dépendances, rien. Les doter un par un aurait demandé vingt
+# quatre demandes de fusion, et la vingt cinquième aurait été oubliée. Chaque
+# contrôle de security.yml est conditionné à ce que le dépôt contient réellement,
+# donc un dépôt sans package-lock.json n'exécute pas l'audit npm.
 include:
-  - project: 'sr-media-ai/adsum/deployment/ci-templates'
-    ref: main
-    file: '/templates/base.yml'
+  - local: '/templates/base.yml'
+  - local: '/templates/security.yml'
 
 node:lint:
   stage: quality
