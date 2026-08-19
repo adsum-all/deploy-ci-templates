@@ -139,12 +139,29 @@ n'énumère que ses réussites ne sert à personne.
 
 | Écart | Conséquence | Ce qu'il faut |
 |---|---|---|
-| Aucun runner propre au groupe, minutes partagées épuisées | Aucun pipeline ne peut aboutir | Des minutes, ou un runner autohébergé rattaché au groupe |
+| Minutes de calcul partagées épuisées depuis le 9 août 2026 | Aucun pipeline ne peut aboutir | Rien, ou des minutes, ou un runner. Voir ci-dessous. |
 | Déploiements hors CI | Pas de traçabilité entre un commit et ce qui tourne | Des pipelines qui tournent, puis des tâches de déploiement |
 | `only_allow_merge_if_pipeline_succeeds` désactivé sur 93 projets | Une fusion peut passer sans vérification | À activer **après** que les pipelines puissent aboutir, sinon plus rien ne fusionne |
 | Console éditeur rangée avec les applications clientes | Confusion de lecture, pas de faille | Migration de sous-groupe avec mise à jour des références |
 | `adsum-commerce` vide sur GitLab | Le service le plus commercial n'est pas versionné | Rattacher le dépôt local à son projet |
 | Environnements GitLab non déclarés | Pas de protection ni d'historique de déploiement | Déclarer staging et production une fois la CI opérationnelle |
+
+### Le quota, daté
+
+Le dernier pipeline vert d'ADSUM date du **9 août 2026**. Le même jour, 62 pipelines
+sont tombés : c'est l'épuisement des minutes partagées du groupe. Tous les échecs
+depuis portent `ci_quota_exceeded`, avec une durée nulle, donc sans exécuter une
+ligne.
+
+Les minutes de l'offre gratuite se rechargent le premier de chaque mois. **La chaîne
+redevient donc opérationnelle d'elle-même le 1er septembre 2026**, sans achat ni
+runner. Acheter des minutes ou rattacher un runner autohébergé avance simplement
+cette date.
+
+Ce constat change la nature du blocage : il est daté et borné, pas structurel. Le
+script `outils/armer_portes_de_fusion.py` refuse d'armer la porte de fusion tant
+qu'aucun pipeline vert de moins de trente jours n'existe, précisément pour qu'on ne
+verrouille pas les vingt-huit dépôts pendant cette fenêtre.
 
 ## 9. Matrice de maturité CI/CD par dépôt
 
