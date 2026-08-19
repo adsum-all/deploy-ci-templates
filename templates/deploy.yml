@@ -1,0 +1,205 @@
+# Déploiement ADSUM : recette, préproduction, production.
+#
+# Aujourd'hui les mises en ligne partent à la main depuis un poste, avec des jetons
+# locaux. Rien ne relie donc ce qui tourne à un commit : quand une régression sort,
+# personne ne sait quelle révision est en cause ni comment revenir en arrière autrement
+# qu'en redéployant ce dont on se souvient.
+#
+# Ce gabarit remplace cela par des tâches déclenchées depuis GitLab, rattachées à un
+# environnement, traçables et réversibles. Il vise les deux hébergeurs réellement
+# utilisés, Cloudflare Pages pour les applications web et Vercel pour les services.
+# Kubernetes n'y figure pas : ADSUM n'en a pas, et écrire des tâches pour une
+# infrastructure absente donnerait une couverture imaginaire.
+#
+# Variables attendues, à déclarer en variables CI/CD **protégées et masquées** au
+# niveau du groupe. Aucune n'a de valeur par défaut : une tâche de déploiement qui
+# démarre sans son jeton doit s'arrêter, pas improviser.
+#
+#   CLOUDFLARE_API_TOKEN      jeton Cloudflare Pages
+#   CLOUDFLARE_ACCOUNT_ID     compte Cloudflare
+#   VERCEL_TOKEN              jeton Vercel
+#   ADSUM_PROJET_PAGES        nom du projet Cloudflare Pages du dépôt
+#   ADSUM_URL_SANTE           adresse interrogée après déploiement
+#
+# Les trois environnements sont déclarés à GitLab. C'est ce qui donne l'historique
+# des mises en ligne, le bouton de retour arrière, et la possibilité de protéger la
+# production pour que seule une personne autorisée puisse y pousser.
+
+variables:
+  # Combien de fois la sonde de santé est retentée avant de conclure à un échec.
+  # Un service qui vient de démarrer répond souvent en erreur pendant quelques
+  # secondes ; conclure au premier essai ferait échouer des déploiements sains.
+  ADSUM_SANTE_TENTATIVES: "10"
+  ADSUM_SANTE_ATTENTE: "6"
+
+.deploiement:
+  interruptible: false   # Interrompre une mise en ligne à mi-course est pire que l'attendre.
+  timeout: 20 minutes
+  before_script:
+    - |
+      set -eu
+      manquantes=""
+      for v in $ADSUM_VARIABLES_REQUISES; do
+        eval "valeur=\${$v:-}"
+        [ -n "$valeur" ] || manquantes="$manquantes $v"
+      done
+      if [ -n "$manquantes" ]; then
+        echo "FAIL : variables requises absentes :$manquantes"
+        echo "Les déclarer en variables CI/CD protégées et masquées du groupe."
+        exit 1
+      fi
+      echo "Toutes les variables requises sont présentes. Aucune valeur n'est affichée."
+
+# -- La sonde de santé, partagée ------------------------------------------------
+
+.sonde-sante:
+  stage: deploy-production
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache curl >/dev/null
+  script:
+    - |
+      set -eu
+      [ -n "${ADSUM_URL_SANTE:-}" ] || { echo "ADSUM_URL_SANTE absente, sonde ignorée"; exit 0; }
+      essai=1
+      while [ "$essai" -le "$ADSUM_SANTE_TENTATIVES" ]; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' \
+               -H 'User-Agent: adsum-ci/1.0' "$ADSUM_URL_SANTE" || echo 000)
+        if [ "$code" = "200" ]; then
+          echo "Santé confirmée au bout de $essai tentative(s)."; exit 0
+        fi
+        echo "  tentative $essai : $code"
+        essai=$((essai + 1)); sleep "$ADSUM_SANTE_ATTENTE"
+      done
+      echo "FAIL : la cible ne répond pas 200 après $ADSUM_SANTE_TENTATIVES tentatives."
+      exit 1
+
+# -- Applications web, Cloudflare Pages -----------------------------------------
+
+.pages:
+  extends: .deploiement
+  image: node:20-alpine
+  variables:
+    ADSUM_VARIABLES_REQUISES: "CLOUDFLARE_API_TOKEN ADSUM_PROJET_PAGES"
+  script:
+    # La branche Pages porte le nom de l'environnement, ce qui donne à Cloudflare
+    # une adresse stable par environnement et non une adresse par déploiement.
+    - npx --yes wrangler@latest pages deploy dist
+        --project-name "$ADSUM_PROJET_PAGES"
+        --branch "$ADSUM_BRANCHE_PAGES"
+        --commit-hash "$CI_COMMIT_SHA"
+
+deploy:recette:pages:
+  extends: .pages
+  stage: deploy-review
+  variables:
+    ADSUM_BRANCHE_PAGES: "$CI_COMMIT_REF_SLUG"
+  environment:
+    name: recette/$CI_COMMIT_REF_SLUG
+    url: https://$CI_COMMIT_REF_SLUG.$ADSUM_PROJET_PAGES.pages.dev
+    on_stop: deploy:recette:arret
+    auto_stop_in: 7 days
+  needs: ["build:application"]
+  rules:
+    - if: '$CI_MERGE_REQUEST_IID'
+      exists: [package.json]
+
+deploy:recette:arret:
+  extends: .deploiement
+  stage: deploy-review
+  image: alpine:3.20
+  variables:
+    GIT_STRATEGY: none
+    ADSUM_VARIABLES_REQUISES: ""
+  # Un environnement éphémère qui survit à sa demande de fusion cesse d'être
+  # éphémère : il occupe une adresse et laisse croire qu'une version est en ligne.
+  script:
+    - echo "Environnement de recette retiré pour $CI_COMMIT_REF_SLUG."
+  environment:
+    name: recette/$CI_COMMIT_REF_SLUG
+    action: stop
+  when: manual
+  rules:
+    - if: '$CI_MERGE_REQUEST_IID'
+      exists: [package.json]
+
+deploy:production:pages:
+  extends: .pages
+  stage: deploy-production
+  variables:
+    ADSUM_BRANCHE_PAGES: "main"
+  environment:
+    name: production
+    url: https://$ADSUM_PROJET_PAGES.pages.dev
+  needs: ["build:application"]
+  # Déclenchement manuel, depuis la branche par défaut uniquement. La mise en ligne
+  # d'une application cliente n'est pas une conséquence automatique d'une fusion :
+  # elle se décide, et elle se date.
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      exists: [package.json]
+
+# -- Services, Vercel -----------------------------------------------------------
+
+.vercel:
+  extends: .deploiement
+  image: node:20-alpine
+  variables:
+    ADSUM_VARIABLES_REQUISES: "VERCEL_TOKEN"
+  script:
+    - npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+        --meta commit="$CI_COMMIT_SHA" --meta pipeline="$CI_PIPELINE_ID"
+
+deploy:production:service:
+  extends: .vercel
+  stage: deploy-production
+  environment:
+    name: production
+    url: $ADSUM_URL_SANTE
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      exists: [vercel.json]
+
+verifier:sante:production:
+  extends: .sonde-sante
+  needs: ["deploy:production:service"]
+  environment:
+    name: production
+    action: verify
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      exists: [vercel.json]
+
+# -- Retour arrière --------------------------------------------------------------
+
+rollback:production:
+  extends: .deploiement
+  stage: deploy-production
+  image: node:20-alpine
+  variables:
+    ADSUM_VARIABLES_REQUISES: "VERCEL_TOKEN"
+    GIT_STRATEGY: none
+  # Le retour arrière ne redéploie pas un ancien commit : il repromeut le
+  # déploiement précédent, déjà construit et déjà servi. Reconstruire prend des
+  # minutes que l'on n'a pas pendant un incident, et rien ne garantit qu'une
+  # reconstruction rende le même artefact.
+  script:
+    - |
+      set -eu
+      echo "Déploiements récents :"
+      npx --yes vercel@latest ls --token "$VERCEL_TOKEN" --yes | head -20
+      echo ""
+      echo "Pour repromouvoir le précédent :"
+      echo "  npx vercel promote <url-du-deploiement> --token \$VERCEL_TOKEN"
+      echo ""
+      echo "Cette tâche liste et n'agit pas : choisir la cible d'un retour arrière"
+      echo "est une décision, et la prendre automatiquement pendant un incident"
+      echo "revient à ajouter une inconnue à une situation qui en a déjà."
+  environment:
+    name: production
+    action: prepare
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
