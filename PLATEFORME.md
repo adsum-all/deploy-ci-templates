@@ -145,3 +145,54 @@ n'énumère que ses réussites ne sert à personne.
 | Console éditeur rangée avec les applications clientes | Confusion de lecture, pas de faille | Migration de sous-groupe avec mise à jour des références |
 | `adsum-commerce` vide sur GitLab | Le service le plus commercial n'est pas versionné | Rattacher le dépôt local à son projet |
 | Environnements GitLab non déclarés | Pas de protection ni d'historique de déploiement | Déclarer staging et production une fois la CI opérationnelle |
+
+## 9. Matrice de maturité CI/CD par dépôt
+
+Relevé du 19 août 2026. « Sécurité » signifie que le dépôt consomme la
+chaîne DevSecOps : secrets, SAST OWASP, dépendances, licences, Trivy, IaC.
+
+| Dépôt | Audience | Gabarit | Sécurité | Écart |
+|---|---|---|---|---|
+| `applications/app-version-android/adsum-mobile` | client | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `applications/app-version-apple/adsum-mobile-ios` | client | aucun | non | demande de fusion ouverte en brouillon |
+| `applications/app-version-web/adsum-back-office` | client | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `applications/app-version-web/adsum-collaboration` | client | deploy-web.yml, node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `applications/app-version-web/adsum-console` | éditeur | aucun | non | demande de fusion ouverte en brouillon |
+| `applications/app-version-web/adsum-controleur` | client | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `applications/app-version-web/adsum-direction` | client | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `applications/app-version-web/adsum-pilotage` | client | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `applications/app-version-web/adsum-public` | client | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `applications/app-version-web/adsum-web-membre` | client | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `deployment/ci-templates` | plateforme | base.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `deployment/database` | plateforme | deploy-migrate.yml, python.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `deployment/infrastructure` | plateforme | terraform.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `deployment/runbooks` | plateforme | base.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `docs/adr` | documentation | base.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `docs/adsum-design` | documentation | aucun | non | demande de fusion ouverte en brouillon |
+| `docs/dat` | documentation | base.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `docs/design` | documentation | base.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `docs/onboarding` | documentation | base.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `packages/core` | transverse | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `packages/qr` | transverse | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `packages/tokens` | transverse | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `packages/ui-native` | transverse | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `packages/ui-web` | transverse | node.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `services/adsum-api` | transverse | deploy-gcp.yml, deploy-web.yml, docker.yml, python-ci.yml, security.yml | oui | aucun |
+| `services/adsum-commerce` | éditeur | aucun | non | demande de fusion ouverte en brouillon |
+| `services/adsum-gateway` | transverse | python.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+| `services/adsum-workers` | transverse | python.yml | héritée | hérite de la chaîne dès que ci-templates !6 est fusionnée |
+
+Les gabarits `node.yml`, `python.yml` et `terraform.yml` tirent désormais
+`security.yml` eux-mêmes. Les vingt quatre dépôts qui les consomment
+héritent donc de la chaîne sans aucune modification chez eux.
+
+**Validation côté serveur**, sans consommer de minute de CI :
+
+| Gabarit | Validé contre | Tâches assemblées |
+|---|---|---|
+| `node.yml` | adsum-back-office | 14 |
+| `python.yml` | adsum-gateway | 13 |
+| `terraform.yml` | infrastructure | 12 |
+| `stack-web.yml` | adsum-console | 16 |
+| `stack-python-service.yml` | adsum-api | 16 |
+| `stack-docs.yml` | adsum-design | 13 |
