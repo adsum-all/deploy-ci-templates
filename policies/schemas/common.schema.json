@@ -65,9 +65,14 @@
           "$ref": "#/$defs/capacite"
         },
         "personal_data": {
-          "type": "boolean",
-          "default": false,
-          "description": "Vrai si la réponse peut contenir une donnée personnelle d'un membre. Sert à interdire qu'une route éditeur en expose une hors accès d'assistance."
+          "type": "string",
+          "enum": [
+            "aucune",
+            "contact-declare",
+            "dossier-client"
+          ],
+          "default": "aucune",
+          "description": "Quelle donnée personnelle la réponse peut porter. « aucune » : des états et des chiffres. « contact-declare » : ce que la personne a elle-même écrit dans sa demande, son nom et son adresse de réponse, et rien de son dossier ; un agent de support en a besoin pour répondre, et le lui refuser rendrait le support impossible. « dossier-client » : la fiche, les présences, les documents, les photos, qui ne s'atteignent que par l'assistance exceptionnelle. Un booléen confondait ces deux dernières, et cette confusion obligeait à choisir entre un support inopérant et une porte ouverte."
         },
         "note": {
           "$ref": "#/$defs/libelle"

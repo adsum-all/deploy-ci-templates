@@ -323,13 +323,16 @@ def verifier_la_frontiere(client: dict[str, Any], editeur: dict[str, Any]) -> li
 
     bris = editeur.get("break_glass", {}).get("id")
     for application, route in _toutes_les_routes(editeur, "editor"):
-        if route.get("personal_data") and route["capability"] != bris:
+        if route.get("personal_data") == "dossier-client" and route["capability"] != bris:
             manquements.append(Manquement(
                 "frontiere", f"{application} : {route['method']} {route['path']}",
-                "route éditeur exposant une donnée personnelle hors assistance",
-                "Exploiter la plateforme n'est pas lire les données de ses clients. "
+                "route éditeur ouvrant le dossier d'un membre hors assistance",
+                "Exploiter la plateforme n'est pas lire les dossiers de ses clients. "
                 "Cette lecture doit passer par l'assistance exceptionnelle, qui est "
-                "autorisée par le client, bornée dans le temps et notifiée."))
+                "autorisée par le client, bornée dans le temps et notifiée. Ce qu'une "
+                "personne a écrit elle-même dans sa demande de support relève de "
+                "« contact-declare » et reste joignable : le lui refuser rendrait le "
+                "support inopérant sans rien protéger."))
 
     for role in editeur.get("roles", []):
         if role.get("may_read_client_personal_data"):

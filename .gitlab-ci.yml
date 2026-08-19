@@ -3,4 +3,8 @@
 include:
   - project: 'sr-media-ai/adsum/deployment/ci-templates'
     ref: main
-    file: '/templates/base.yml'
+    file:
+      - '/templates/base.yml'
+      # Les deux politiques d'acces vivent ici : c'est donc ici que leur
+      # forme, leur coherence et la disjonction des deux mondes sont verifiees.
+      - '/templates/policies.yml'
