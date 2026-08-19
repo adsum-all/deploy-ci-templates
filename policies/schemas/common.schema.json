@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adsum.sr-media-ai.dev/policies/common.schema.json",
+  "title": "Définitions partagées par les deux politiques d'accès ADSUM",
+  "description": "Ce fichier ne se valide pas seul. Il porte les briques communes aux deux politiques, pour qu'une règle écrite d'un côté ne puisse pas dériver de l'autre. Une divergence de forme entre les deux politiques serait la première fissure par laquelle la frontière se perd.",
+  "$defs": {
+    "identifiant": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Identifiant machine, en minuscules et tirets. Jamais un libellé."
+    },
+    "capacite": {
+      "type": "string",
+      "pattern": "^(client|editor)\\.[a-z0-9]+(-[a-z0-9]+)*(\\.[a-z0-9]+(-[a-z0-9]+)*)+$",
+      "description": "Capacité nommée, préfixée par son monde. Le préfixe n'est pas décoratif : il rend structurellement impossible qu'une même capacité figure des deux côtés, ce qui est la première façon dont une frontière se perd.",
+      "examples": [
+        "client.membres.consulter",
+        "editor.tenants.suspendre"
+      ]
+    },
+    "libelle": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 300,
+      "description": "Texte lisible par un humain, en français."
+    },
+    "justification": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 2000,
+      "description": "Pourquoi cette règle existe. Une règle dont personne ne sait plus la raison est une règle qu'on finit par retirer au premier obstacle, et une longueur minimale est le seul moyen mécanique d'empêcher un « parce que » vide."
+    },
+    "methode_http": {
+      "type": "string",
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS"
+      ]
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "path",
+        "capability"
+      ],
+      "properties": {
+        "method": {
+          "$ref": "#/$defs/methode_http"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/[A-Za-z0-9/_{}.-]*$",
+          "description": "Chemin tel que le serveur le déclare, paramètres compris sous la forme {nom}. Il doit correspondre au caractère près à la table de routage réelle, sans quoi la conformité ne peut pas être vérifiée automatiquement."
+        },
+        "capability": {
+          "$ref": "#/$defs/capacite"
+        },
+        "personal_data": {
+          "type": "boolean",
+          "default": false,
+          "description": "Vrai si la réponse peut contenir une donnée personnelle d'un membre. Sert à interdire qu'une route éditeur en expose une hors accès d'assistance."
+        },
+        "note": {
+          "$ref": "#/$defs/libelle"
+        }
+      }
+    },
+    "evenement_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "actor",
+        "target",
+        "outcome"
+      ],
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/identifiant"
+        },
+        "actor": {
+          "type": "string",
+          "enum": [
+            "client-user",
+            "editor-operator",
+            "service",
+            "anonymous"
+          ],
+          "description": "Qui agit. Un service n'est pas une personne et ne doit jamais être journalisé comme telle."
+        },
+        "target": {
+          "$ref": "#/$defs/libelle"
+        },
+        "outcome": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "succes",
+              "refus",
+              "erreur"
+            ]
+          },
+          "description": "Les issues qui doivent laisser une trace. Un refus non journalisé est un angle mort : c'est justement la tentative qui intéresse."
+        },
+        "requires_reason": {
+          "type": "boolean",
+          "default": false,
+          "description": "L'acteur doit saisir un motif libre, conservé avec l'événement."
+        },
+        "correlation": {
+          "type": "boolean",
+          "default": true,
+          "description": "L'événement porte l'identifiant de corrélation de la requête."
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 3650,
+          "description": "Durée de conservation. Le plancher de trente jours vient de l'usage : un audit réclamé par un client porte au minimum sur le mois écoulé."
+        }
+      }
+    },
+    "interdiction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement",
+        "enforced_by",
+        "rationale"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifiant"
+        },
+        "statement": {
+          "$ref": "#/$defs/libelle"
+        },
+        "enforced_by": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Ce qui refuse concrètement. Une interdiction dont la liste est vide est une intention, pas une règle : la validation la refuse.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "token-audience",
+              "server-authorization",
+              "database-rls",
+              "database-schema-separation",
+              "network-separation",
+              "route-absent",
+              "conformance-test",
+              "human-procedure"
+            ]
+          }
+        },
+        "rationale": {
+          "$ref": "#/$defs/justification"
+        },
+        "test": {
+          "type": "string",
+          "description": "Chemin du test qui prouve le refus, sous la forme depot:chemin::test. Absent tant que le test n'existe pas ; la validation signale alors l'interdiction comme non prouvée."
+        }
+      }
+    }
+  }
+}

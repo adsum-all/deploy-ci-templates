@@ -1,0 +1,414 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adsum.sr-media-ai.dev/policies/editor-access-policy.schema.json",
+  "title": "Politique d'accès côté éditeur ADSUM",
+  "description": "Ce que peut l'entreprise qui fabrique et exploite ADSUM. Exploiter la plateforme n'est pas lire les données de ses clients : la politique sépare ces deux choses et exige qu'un accès aux données d'une organisation soit demandé, borné dans le temps et tracé.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metadata", "scope", "roles", "internal_applications", "tenant_operations",
+    "commerce_operations", "support_operations", "observability_operations",
+    "privileged_actions", "break_glass", "audit_events", "prohibited_capabilities"
+  ],
+
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "side", "version", "updated_at", "security_owner", "technical_owner",
+        "environment", "status", "sensitivity", "source_of_truth",
+        "approval_procedure", "revocation_procedures", "compatibility"
+      ],
+      "properties": {
+        "side": { "const": "editor" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "updated_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "security_owner": { "$ref": "common.schema.json#/$defs/libelle" },
+        "technical_owner": { "$ref": "common.schema.json#/$defs/libelle" },
+        "environment": { "type": "string", "enum": ["production", "recette", "developpement"] },
+        "status": { "type": "string", "enum": ["brouillon", "en-vigueur", "remplacee"] },
+        "sensitivity": {
+          "type": "string",
+          "enum": ["interne", "confidentiel", "secret"],
+          "description": "Niveau de sensibilité du document lui-même. Il décrit les pouvoirs internes : le diffuser largement revient à publier la carte des serrures."
+        },
+        "source_of_truth": { "type": "string", "minLength": 10 },
+        "approval_procedure": { "$ref": "common.schema.json#/$defs/justification" },
+        "revocation_procedures": {
+          "type": "array", "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trigger", "action", "maximum_delay_minutes"],
+            "properties": {
+              "trigger": { "$ref": "common.schema.json#/$defs/libelle" },
+              "action": { "$ref": "common.schema.json#/$defs/libelle" },
+              "maximum_delay_minutes": {
+                "type": "integer", "minimum": 0, "maximum": 1440,
+                "description": "Délai maximal entre le déclencheur et la perte effective de l'accès. Un départ d'employé dont l'accès survit une semaine n'est pas une révocation."
+              }
+            }
+          }
+        },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["breaking_change_requires", "review_required_for"],
+          "properties": {
+            "breaking_change_requires": {
+              "type": "array", "minItems": 1,
+              "items": { "$ref": "common.schema.json#/$defs/libelle" }
+            },
+            "review_required_for": {
+              "type": "array", "minItems": 1,
+              "items": { "$ref": "common.schema.json#/$defs/libelle" }
+            }
+          }
+        }
+      }
+    },
+
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "editor_only", "client_access_forbidden", "least_privilege",
+        "demonstrated_need", "sensitive_actions_logged", "token_audience",
+        "authority_source"
+      ],
+      "properties": {
+        "editor_only": { "const": true },
+        "client_access_forbidden": {
+          "const": true,
+          "description": "Aucun rôle éditeur ne donne d'accès aux applications métier d'une organisation cliente. Y accéder passe par l'assistance exceptionnelle, jamais par le rôle."
+        },
+        "least_privilege": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default", "statement"],
+          "properties": {
+            "default": { "const": "deny" },
+            "statement": { "$ref": "common.schema.json#/$defs/justification" }
+          }
+        },
+        "demonstrated_need": { "$ref": "common.schema.json#/$defs/justification" },
+        "sensitive_actions_logged": { "const": true },
+        "token_audience": {
+          "type": "string",
+          "const": "adsum-editeur",
+          "description": "Audience réservée. Un jeton client ne peut pas la porter, et un jeton éditeur est refusé sur les routes clientes : la frontière tient dans le jeton avant de tenir dans le code."
+        },
+        "authority_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["table", "schema", "statement"],
+          "properties": {
+            "table": { "type": "string", "minLength": 3 },
+            "schema": { "type": "string", "minLength": 3 },
+            "statement": {
+              "$ref": "common.schema.json#/$defs/justification",
+              "description": "Pourquoi l'autorité vient d'une inscription en base et non d'un rôle porté par le jeton. Un rôle ne peut pas porter cette frontière : le même mot existe des deux côtés."
+            }
+          }
+        }
+      }
+    },
+
+    "roles": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "purpose", "grants", "mfa", "may_read_client_personal_data", "exists_in_code"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$",
+            "description": "Toujours préfixé « editor- », pour qu'aucun rôle ne puisse porter le même nom des deux côtés."
+          },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "purpose": { "$ref": "common.schema.json#/$defs/justification" },
+          "grants": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/capacite" }
+          },
+          "inherits": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" }
+          },
+          "mfa": {
+            "type": "string",
+            "enum": ["obligatoire", "obligatoire-renforce"],
+            "description": "Aucun rôle éditeur sans MFA. Un compte interne compromis ouvre le parc entier, pas une organisation."
+          },
+          "may_read_client_personal_data": {
+            "const": false,
+            "description": "Toujours faux. Aucun rôle éditeur, pas même le propriétaire, ne lit une donnée personnelle client par son rôle. Ce chemin existe, il s'appelle assistance exceptionnelle, et il est borné et tracé."
+          },
+          "session_maximum_minutes": {
+            "type": "integer", "minimum": 15, "maximum": 720,
+            "description": "Durée maximale d'une session interne avant réauthentification."
+          },
+          "exists_in_code": { "type": "boolean" },
+          "code_reference": { "type": "string" },
+          "implementation_ticket": { "type": "string" }
+        }
+      }
+    },
+
+    "internal_applications": {
+      "type": "array",
+      "minItems": 2,
+      "description": "Les applications réservées à l'éditeur. Une application absente d'ici ne doit pas exiger d'autorité éditeur, et une application présente ne doit jamais être servie à un client.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "repository", "audience", "roles_allowed", "domains", "status"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/identifiant" },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "repository": { "type": "string", "minLength": 3 },
+          "audience": { "const": "adsum-editeur" },
+          "roles_allowed": {
+            "type": "array", "minItems": 1,
+            "items": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" }
+          },
+          "domains": {
+            "type": "array", "minItems": 1,
+            "description": "Les six domaines d'exploitation attendus. Déclarer un domaine absent est une information utile : la validation le remonte comme manque assumé plutôt que de le passer sous silence.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sante-incidents",
+                "taches-livraison",
+                "audit-securite-permissions",
+                "clients-contrats-abonnements",
+                "support-tickets",
+                "deploiements-versions-environnements",
+                "catalogue-produits",
+                "finance"
+              ]
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["en-production", "partiel", "prevu", "absent"],
+            "description": "État réel, pas état souhaité. « partiel » oblige à renseigner missing."
+          },
+          "missing": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/libelle" },
+            "description": "Ce qui manque encore. Exigé quand status vaut partiel ou prevu."
+          },
+          "routes": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/route" }
+          }
+        }
+      }
+    },
+
+    "tenant_operations": {
+      "type": "array",
+      "minItems": 8,
+      "description": "Le cycle de vie d'une organisation cliente, vu de l'éditeur.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "minimum_role", "reversible", "audit_event"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/capacite" },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "minimum_role": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" },
+          "reversible": { "type": "boolean" },
+          "requires_workflow": {
+            "type": "boolean",
+            "default": false,
+            "description": "L'opération passe par un enchaînement contrôlé et non par un appel direct. Vrai obligatoirement pour toute suppression."
+          },
+          "touches_client_data": { "type": "boolean", "default": false },
+          "audit_event": { "$ref": "common.schema.json#/$defs/identifiant" }
+        }
+      }
+    },
+
+    "commerce_operations": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "minimum_role", "audit_event"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/capacite" },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "minimum_role": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" },
+          "financial_impact": { "type": "boolean", "default": false },
+          "audit_event": { "$ref": "common.schema.json#/$defs/identifiant" }
+        }
+      }
+    },
+
+    "support_operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_visibility", "operations", "personal_data_rule"],
+      "properties": {
+        "default_visibility": {
+          "type": "string",
+          "enum": ["metadonnees-seules"],
+          "description": "Par défaut un agent voit le fil de support et rien du dossier de la personne. Le contraire ferait du support un droit de regard permanent sur les membres."
+        },
+        "personal_data_rule": { "$ref": "common.schema.json#/$defs/justification" },
+        "operations": {
+          "type": "array", "minItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "minimum_role"],
+            "properties": {
+              "id": { "$ref": "common.schema.json#/$defs/capacite" },
+              "label": { "$ref": "common.schema.json#/$defs/libelle" },
+              "minimum_role": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" },
+              "reads_personal_data": { "type": "boolean", "default": false },
+              "audit_event": { "$ref": "common.schema.json#/$defs/identifiant" }
+            }
+          }
+        }
+      }
+    },
+
+    "observability_operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operations", "logging_rules"],
+      "properties": {
+        "operations": {
+          "type": "array", "minItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "minimum_role"],
+            "properties": {
+              "id": { "$ref": "common.schema.json#/$defs/capacite" },
+              "label": { "$ref": "common.schema.json#/$defs/libelle" },
+              "minimum_role": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" },
+              "aggregated_only": {
+                "type": "boolean",
+                "default": true,
+                "description": "La lecture porte sur des chiffres et des états, jamais sur des lignes nominatives."
+              }
+            }
+          }
+        },
+        "logging_rules": {
+          "type": "array", "minItems": 3,
+          "items": { "$ref": "common.schema.json#/$defs/libelle" },
+          "description": "Ce qui ne doit jamais entrer dans un journal : secret, jeton, adresse en clair, contenu de message, pièce d'identité."
+        }
+      }
+    },
+
+    "privileged_actions": {
+      "type": "array",
+      "minItems": 8,
+      "description": "Les actions qui font mal. Chacune porte son garde-fou complet ; une action privilégiée sans mécanisme de retour arrière déclaré doit être justifiée explicitement.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "label", "minimum_role", "requires_approval",
+          "requires_strong_confirmation", "requires_justification",
+          "data_touched", "functional_effect", "rollback", "audit_event"
+        ],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/capacite" },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "minimum_role": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" },
+          "requires_approval": {
+            "type": "boolean",
+            "description": "Une deuxième personne valide. Réservé à ce qui ne se répare pas, pour que l'exigence garde son sens."
+          },
+          "approver_role": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" },
+          "requires_strong_confirmation": { "type": "boolean" },
+          "requires_justification": { "type": "boolean" },
+          "data_touched": { "$ref": "common.schema.json#/$defs/libelle" },
+          "functional_effect": { "$ref": "common.schema.json#/$defs/libelle" },
+          "rollback": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["possible", "how"],
+            "properties": {
+              "possible": { "type": "boolean" },
+              "how": { "$ref": "common.schema.json#/$defs/libelle" }
+            }
+          },
+          "audit_event": { "$ref": "common.schema.json#/$defs/identifiant" },
+          "notifies": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["client-contact", "editor-security", "editor-oncall", "aucun"] }
+          },
+          "maximum_duration_minutes": {
+            "type": "integer", "minimum": 5, "maximum": 1440,
+            "description": "Pour une action temporaire, la durée au-delà de laquelle elle retombe seule. Un privilège qui ne retombe pas seul finit permanent."
+          }
+        }
+      }
+    },
+
+    "break_glass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "statement", "requires_client_authorisation", "requires_approval",
+        "maximum_duration_minutes", "scope_limited_to", "audit_event",
+        "notifies", "revocation"
+      ],
+      "description": "L'assistance exceptionnelle : le seul chemin par lequel un employé de l'éditeur peut approcher les données d'une organisation cliente.",
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/capacite" },
+        "statement": { "$ref": "common.schema.json#/$defs/justification" },
+        "requires_client_authorisation": {
+          "const": true,
+          "description": "L'organisation cliente autorise, explicitement, depuis son portail. Sans cela l'éditeur s'autoriserait lui-même l'accès aux données de ses clients."
+        },
+        "requires_approval": { "const": true },
+        "approver_role": { "type": "string", "pattern": "^editor-[a-z0-9]+(-[a-z0-9]+)*$" },
+        "maximum_duration_minutes": {
+          "type": "integer", "minimum": 15, "maximum": 480,
+          "description": "L'accès expire seul. Une expiration qui dépend d'un geste humain n'arrive pas le vendredi soir."
+        },
+        "scope_limited_to": {
+          "type": "array", "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/libelle" }
+        },
+        "audit_event": { "$ref": "common.schema.json#/$defs/identifiant" },
+        "notifies": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "string", "enum": ["client-contact", "editor-security", "editor-oncall"] },
+          "description": "Le contact client est prévenu. Un accès dont le client n'apprend jamais l'existence n'est pas une assistance, c'est une porte."
+        },
+        "revocation": { "$ref": "common.schema.json#/$defs/libelle" },
+        "forbidden_even_then": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/libelle" },
+          "description": "Ce qui reste refusé même sous assistance : mot de passe, jeton, clé privée, pièce d'identité déchiffrée."
+        }
+      }
+    },
+
+    "audit_events": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "$ref": "common.schema.json#/$defs/evenement_audit" }
+    },
+
+    "prohibited_capabilities": {
+      "type": "array",
+      "minItems": 10,
+      "items": { "$ref": "common.schema.json#/$defs/interdiction" }
+    }
+  }
+}

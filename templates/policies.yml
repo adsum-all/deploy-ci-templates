@@ -1,0 +1,93 @@
+# ADSUM CI - politiques d'accès client et éditeur.
+#
+# Deux fichiers JSON décrivent qui peut quoi, d'un côté et de l'autre de la frontière.
+# Sans ces tâches, ils seraient deux documents que personne ne relit et que le code
+# contredit en silence. Avec elles, une politique fausse ou un code qui s'en écarte
+# arrête le pipeline.
+#
+# Trois tâches, dans cet ordre d'exigence croissante.
+#
+#   policy:validate     la politique se tient elle-même (forme, cohérence, frontière)
+#   policy:conformance  le code du dépôt fait ce que la politique dit
+#   policy:drift        l'exemplaire local est identique à celui qui fait foi
+#
+# La première tourne dans le dépôt ci-templates, qui héberge l'exemplaire faisant foi.
+# Les deux autres tournent dans chaque dépôt qui applique la politique, et n'ont donc
+# de sens que là où un test de conformité existe.
+
+include:
+  - project: 'sr-media-ai/adsum/deployment/ci-templates'
+    ref: main
+    file: '/templates/base.yml'
+
+variables:
+  # Où vit l'exemplaire faisant foi. Un dépôt consommateur le récupère plutôt que d'en
+  # garder une copie : deux copies divergent, et c'est la copie oubliée qui sert de
+  # référence le jour où quelqu'un vérifie.
+  ADSUM_POLICIES_PROJECT: 'sr-media-ai/adsum/deployment/ci-templates'
+  ADSUM_POLICIES_REF: 'main'
+  ADSUM_POLICIES_DIR: 'policies'
+
+.policy_base:
+  image: python:3.11-slim
+  before_script:
+    - pip install --quiet jsonschema
+
+policy:validate:
+  extends: .policy_base
+  stage: quality
+  script:
+    - python policies/outils/verifier_politiques.py
+  rules:
+    # Ne tourne que dans le dépôt qui détient les politiques.
+    - exists:
+        - policies/client-access-policy.json
+        - policies/editor-access-policy.json
+
+policy:conformance:
+  extends: .policy_base
+  stage: test
+  script:
+    # Le dépôt consommateur récupère l'exemplaire faisant foi. Le clone est superficiel :
+    # seule la dernière version compte, et l'historique des politiques se lit sur GitLab.
+    - apt-get update -qq && apt-get install -y -qq git >/dev/null
+    - git clone --depth 1 --branch "$ADSUM_POLICIES_REF"
+        "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${ADSUM_POLICIES_PROJECT}.git"
+        /tmp/politiques
+    - export ADSUM_POLICIES="/tmp/politiques/${ADSUM_POLICIES_DIR}"
+    - pip install --quiet -r requirements.txt 2>/dev/null || true
+    - pip install --quiet pytest
+    # Le test de conformité compare la table de routage réelle à la politique. Il
+    # échoue sur une route non déclarée, déclarée du mauvais côté, ou dont la garde
+    # ne correspond pas à la capacité annoncée.
+    - pytest -q tests/test_conformite_politiques.py
+  rules:
+    - exists:
+        - tests/test_conformite_politiques.py
+
+policy:drift:
+  extends: .policy_base
+  stage: quality
+  script:
+    - apt-get update -qq && apt-get install -y -qq git >/dev/null
+    - git clone --depth 1 --branch "$ADSUM_POLICIES_REF"
+        "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${ADSUM_POLICIES_PROJECT}.git"
+        /tmp/politiques
+    # Un dépôt qui garde une copie locale doit la garder identique. Une copie qui
+    # dérive est pire que pas de copie : elle donne une réponse, et c'est la mauvaise.
+    - |
+      for fichier in client-access-policy.json editor-access-policy.json; do
+        local_f="policies/$fichier"
+        [ -f "$local_f" ] || continue
+        if ! diff -q "$local_f" "/tmp/politiques/${ADSUM_POLICIES_DIR}/$fichier" >/dev/null; then
+          echo "La copie locale de $fichier a derive de l'exemplaire faisant foi."
+          diff -u "/tmp/politiques/${ADSUM_POLICIES_DIR}/$fichier" "$local_f" | head -60
+          exit 1
+        fi
+      done
+      echo "Aucune derive."
+  rules:
+    - if: '$CI_PROJECT_PATH == $ADSUM_POLICIES_PROJECT'
+      when: never
+    - exists:
+        - policies/client-access-policy.json

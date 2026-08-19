@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adsum.sr-media-ai.dev/policies/client-access-policy.schema.json",
+  "title": "Politique d'accès côté client ADSUM",
+  "description": "Ce que peut une organisation cliente, et rien de plus. Le document est contraignant : la validation le refuse s'il déclare quoi que ce soit qui appartient à l'éditeur, et les tests de conformité de chaque dépôt échouent si le code s'en écarte.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metadata", "scope", "roles", "applications", "data_boundaries",
+    "actions", "module_entitlements", "api_policy", "audit_events",
+    "prohibited_capabilities"
+  ],
+
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["side", "functional_owner", "technical_owner"],
+      "properties": {
+        "side": {
+          "const": "client",
+          "description": "Verrou de fichier. Une politique cliente qui se déclarerait éditeur passerait tous les autres contrôles sans être lue au bon endroit."
+        },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "updated_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "functional_owner": { "$ref": "common.schema.json#/$defs/libelle" },
+        "technical_owner": { "$ref": "common.schema.json#/$defs/libelle" },
+        "environment": { "type": "string", "enum": ["production", "recette", "developpement"] },
+        "status": { "type": "string", "enum": ["brouillon", "en-vigueur", "remplacee"] },
+        "source_of_truth": { "type": "string", "minLength": 10 },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["breaking_change_requires", "review_required_for"],
+          "properties": {
+            "breaking_change_requires": {
+              "type": "array", "minItems": 1,
+              "items": { "$ref": "common.schema.json#/$defs/libelle" }
+            },
+            "review_required_for": {
+              "type": "array", "minItems": 1,
+              "items": { "$ref": "common.schema.json#/$defs/libelle" }
+            }
+          }
+        }
+      }
+    },
+
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_bound", "cross_tenant_forbidden", "editor_capabilities_forbidden",
+        "least_privilege", "separation", "token_audience"
+      ],
+      "properties": {
+        "tenant_bound": {
+          "const": true,
+          "description": "Tout accès client est borné à une organisation. Non négociable : c'est l'invariant dont tout le reste dépend."
+        },
+        "cross_tenant_forbidden": { "const": true },
+        "editor_capabilities_forbidden": { "const": true },
+        "least_privilege": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default", "statement"],
+          "properties": {
+            "default": {
+              "const": "deny",
+              "description": "Refus par défaut. Une permission non détenue est refusée, jamais tolérée."
+            },
+            "statement": { "$ref": "common.schema.json#/$defs/justification" }
+          }
+        },
+        "separation": {
+          "type": "array",
+          "minItems": 4,
+          "description": "Les plans que la politique tient séparés : donnée métier, administration, consultation, contrôle terrain.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["plane", "statement"],
+            "properties": {
+              "plane": {
+                "type": "string",
+                "enum": ["donnees-metier", "administration", "consultation", "controle-terrain", "collaboration", "facturation"]
+              },
+              "statement": { "$ref": "common.schema.json#/$defs/libelle" }
+            }
+          }
+        },
+        "token_audience": {
+          "type": "string",
+          "const": "adsum-client",
+          "description": "L'audience que doit porter tout jeton client. Un jeton d'une autre audience est refusé sur toute route cliente, et réciproquement : c'est le seul contrôle qui tienne sans consulter la base."
+        }
+      }
+    },
+
+    "roles": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "purpose", "grants", "scope_type", "exists_in_code"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^client-[a-z0-9]+(-[a-z0-9]+)*$",
+            "description": "Toujours préfixé « client- ». Le préfixe empêche mécaniquement qu'un rôle porte le même nom des deux côtés, ce qui est arrivé et a ouvert la console de l'éditeur aux administrateurs de tenant."
+          },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "purpose": { "$ref": "common.schema.json#/$defs/justification" },
+          "grants": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/capacite" },
+            "description": "Capacités accordées. Elles doivent toutes commencer par « client. » : le schéma refuse une capacité éditeur ici."
+          },
+          "inherits": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^client-[a-z0-9]+(-[a-z0-9]+)*$" },
+            "description": "Rôles dont celui-ci reprend les capacités. L'outil de validation refuse un cycle."
+          },
+          "scope_type": {
+            "type": "string",
+            "enum": ["organisation", "perimetre", "personnel"],
+            "description": "Jusqu'où porte le rôle : toute l'organisation, un périmètre délégué, ou les seules données de la personne."
+          },
+          "mfa": {
+            "type": "string",
+            "enum": ["obligatoire", "recommande", "optionnel"],
+            "default": "optionnel"
+          },
+          "exists_in_code": {
+            "type": "boolean",
+            "description": "Vrai si le rôle est déjà porté par le code aujourd'hui. Faux signale un rôle à créer, et la validation exige alors un champ implementation_ticket."
+          },
+          "code_reference": {
+            "type": "string",
+            "description": "Où le rôle est déclaré, sous la forme depot:chemin:ligne. Exigé quand exists_in_code vaut vrai."
+          },
+          "implementation_ticket": { "type": "string" }
+        }
+      }
+    },
+
+    "applications": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Les applications que le client peut ouvrir. Une application absente de cette liste ne doit pas lui être servie.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "repository", "audience", "roles_allowed", "requires_module"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/identifiant" },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "repository": { "type": "string", "minLength": 3 },
+          "audience": { "const": "adsum-client" },
+          "roles_allowed": {
+            "type": "array", "minItems": 1,
+            "items": { "type": "string", "pattern": "^client-[a-z0-9]+(-[a-z0-9]+)*$" }
+          },
+          "requires_module": {
+            "type": ["string", "null"],
+            "description": "Module dont l'activation conditionne l'application. Null quand elle fait partie du socle."
+          },
+          "routes": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/route" }
+          },
+          "degraded_when_suspended": {
+            "type": "string",
+            "enum": ["lecture-seule", "bloquee", "disponible"],
+            "description": "Ce que devient l'application quand l'abonnement est suspendu. Déclaré ici plutôt que décidé au cas par cas dans chaque écran."
+          }
+        }
+      }
+    },
+
+    "data_boundaries": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ce que chaque rôle peut voir, modifier, exporter, et ce qu'il ne verra jamais.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "may_read", "may_write", "may_export", "never"],
+        "properties": {
+          "role": { "type": "string", "pattern": "^client-[a-z0-9]+(-[a-z0-9]+)*$" },
+          "may_read": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/libelle" } },
+          "may_write": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/libelle" } },
+          "may_export": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/libelle" } },
+          "never": {
+            "type": "array", "minItems": 1,
+            "items": { "$ref": "common.schema.json#/$defs/libelle" },
+            "description": "Au moins une entrée. Un rôle sans interdiction écrite est un rôle dont personne n'a réfléchi aux limites."
+          },
+          "organisational_limit": { "$ref": "common.schema.json#/$defs/libelle" },
+          "temporal_limit": { "$ref": "common.schema.json#/$defs/libelle" }
+        }
+      }
+    },
+
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "kind", "minimum_role"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/capacite" },
+          "label": { "$ref": "common.schema.json#/$defs/libelle" },
+          "kind": {
+            "type": "string",
+            "enum": ["ordinaire", "sensible", "interdite"],
+            "description": "Une action interdite figure ici pour être testée comme telle, et non pour être simplement absente."
+          },
+          "minimum_role": { "type": "string", "pattern": "^client-[a-z0-9]+(-[a-z0-9]+)*$" },
+          "requires_confirmation": { "type": "boolean", "default": false },
+          "requires_reason": { "type": "boolean", "default": false },
+          "requires_second_approval": { "type": "boolean", "default": false },
+          "audit_event": { "$ref": "common.schema.json#/$defs/identifiant" },
+          "reversible": { "type": "boolean" }
+        }
+      }
+    },
+
+    "module_entitlements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principle", "modules", "suspension_behaviour"],
+      "properties": {
+        "principle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["module_never_grants_privilege", "statement"],
+          "properties": {
+            "module_never_grants_privilege": {
+              "const": true,
+              "description": "Un module ne donne jamais un droit à lui seul. Le droit effectif est l'intersection du tenant actif, de l'abonnement actif, du module actif, du rôle et de la permission. Inverser cet ordre transforme un achat en élévation de privilège."
+            },
+            "statement": { "$ref": "common.schema.json#/$defs/justification" }
+          }
+        },
+        "modules": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "label", "applications", "capabilities"],
+            "properties": {
+              "code": { "$ref": "common.schema.json#/$defs/identifiant" },
+              "label": { "$ref": "common.schema.json#/$defs/libelle" },
+              "applications": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/identifiant" } },
+              "capabilities": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/capacite" } },
+              "unavailable_without": { "$ref": "common.schema.json#/$defs/libelle" }
+            }
+          }
+        },
+        "suspension_behaviour": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["grace_days", "then", "data_retained", "reactivation"],
+          "properties": {
+            "grace_days": { "type": "integer", "minimum": 0, "maximum": 180 },
+            "then": {
+              "type": "string",
+              "enum": ["lecture-seule", "bloquee"],
+              "description": "Ce qui arrive après la grâce. La destruction n'est pas une option : une suspension commerciale ne détruit jamais de données."
+            },
+            "data_retained": { "const": true },
+            "reactivation": { "$ref": "common.schema.json#/$defs/libelle" },
+            "always_available": {
+              "type": "array",
+              "items": { "$ref": "common.schema.json#/$defs/libelle" },
+              "description": "Ce qui reste joignable même suspendu : régler sa facture, exporter ses données, joindre le support. Couper cela transformerait un impayé en séquestre."
+            }
+          }
+        }
+      }
+    },
+
+    "api_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audiences", "scopes", "backend_controls", "denial", "anti_enumeration", "anti_escalation"],
+      "properties": {
+        "audiences": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "string", "enum": ["adsum-client"] },
+          "description": "Un jeton client ne porte que cette audience. La liste est fermée exprès."
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["scope", "grants"],
+            "properties": {
+              "scope": { "$ref": "common.schema.json#/$defs/identifiant" },
+              "grants": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/capacite" } }
+            }
+          }
+        },
+        "backend_controls": {
+          "type": "array", "minItems": 3,
+          "items": { "$ref": "common.schema.json#/$defs/libelle" },
+          "description": "Les contrôles que le serveur applique quoi qu'il arrive. Le frontal n'est jamais l'autorité."
+        },
+        "denial": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unauthenticated", "unauthorised", "unknown_resource"],
+          "properties": {
+            "unauthenticated": { "type": "integer", "enum": [401] },
+            "unauthorised": { "type": "integer", "enum": [403] },
+            "unknown_resource": {
+              "type": "integer",
+              "enum": [404],
+              "description": "Une ressource d'un autre tenant répond 404 et non 403 : un 403 confirmerait son existence."
+            }
+          }
+        },
+        "anti_enumeration": {
+          "type": "array", "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/libelle" }
+        },
+        "anti_escalation": {
+          "type": "array", "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/libelle" }
+        }
+      }
+    },
+
+    "audit_events": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "common.schema.json#/$defs/evenement_audit" }
+    },
+
+    "prohibited_capabilities": {
+      "type": "array",
+      "minItems": 10,
+      "description": "Ce qu'un client ne peut jamais faire. Chaque entrée nomme ce qui le refuse ; une intention sans mécanisme n'est pas admise.",
+      "items": { "$ref": "common.schema.json#/$defs/interdiction" }
+    }
+  }
+}
