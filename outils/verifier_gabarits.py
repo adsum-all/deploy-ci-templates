@@ -10,7 +10,12 @@ Trois contrôles, choisis parce que ce sont les trois pannes réellement observ�
 1. La syntaxe. Un YAML invalide casse tout le monde d'un coup.
 2. Les étapes citées mais non déclarées. Retirer une étape du socle est indolore ici
    et fatal chez le consommateur qui l'utilise encore.
-3. Les héritages vers un modèle absent du fichier. GitLab ne résout `extends` qu'à
+3. Les lignes de script que YAML ne lit pas comme du texte. Un scalaire simple
+   contenant « : » suivi d'une espace est un dictionnaire pour YAML : la ligne
+   `- echo "FAIL: absent"` cesse d'être une commande, et GitLab refuse la tâche avec
+   un message qui ne nomme pas la cause. Le piège est invisible à la lecture.
+
+4. Les héritages vers un modèle absent du fichier. GitLab ne résout `extends` qu'à
    l'intérieur de la configuration assemblée ; un modèle qui vit dans un autre
    gabarit non inclus produit une erreur au chargement.
 
@@ -69,6 +74,14 @@ def verifier() -> list[str]:
                 manquements.append(
                     f"{chemin.name} : « {nom} » cite l'étape « {etape} », "
                     f"absente de {SOCLE.name}.")
+            for cle in ("script", "before_script", "after_script"):
+                for rang, ligne in enumerate(corps.get(cle) or []):
+                    if not isinstance(ligne, str):
+                        manquements.append(
+                            f"{chemin.name} : « {nom} » {cle}[{rang}] n'est pas une "
+                            "chaîne. Un « : » suivi d'une espace dans un scalaire non "
+                            "quoté fait lire la ligne comme un dictionnaire ; "
+                            "entourer la commande de guillemets ou utiliser « >- ».")
             herite = corps.get("extends")
             parents = [herite] if isinstance(herite, str) else (herite or [])
             for parent in parents:

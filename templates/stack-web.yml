@@ -11,12 +11,13 @@
 #       ref: main
 #       file: '/templates/stack-web.yml'
 
+# Inclusions locales : elles se résolvent dans CE dépôt, à la révision que le
+# consommateur a demandée par son propre « ref ». Les pointer sur « main » figeait le
+# socle à la version publiée, si bien qu'un gabarit et son socle pouvaient diverger
+# d'une étape, ce que GitLab signale par « chosen stage does not exist ».
 include:
-  - project: 'sr-media-ai/adsum/deployment/ci-templates'
-    ref: main
-    file:
-      - '/templates/base.yml'
-      - '/templates/security.yml'
+  - local: '/templates/base.yml'
+  - local: '/templates/security.yml'
 
 .web:
   image: node:20-alpine
@@ -39,7 +40,9 @@ validate:manifeste:
     # Un package.json invalide fait échouer chaque tâche suivante avec un message
     # obscur. Le dire ici coûte dix secondes et évite de chercher ailleurs.
     - node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
-    - test -f package-lock.json || (echo "FAIL: package-lock.json absent, l'installation ne serait pas reproductible"; exit 1)
+    - >-
+      test -f package-lock.json ||
+      { echo "FAIL package-lock.json absent, installation non reproductible"; exit 1; }
   rules:
     - exists: [package.json]
 

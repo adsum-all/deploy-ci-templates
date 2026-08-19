@@ -7,12 +7,13 @@
 #       ref: main
 #       file: '/templates/stack-python-service.yml'
 
+# Inclusions locales : elles se résolvent dans CE dépôt, à la révision que le
+# consommateur a demandée par son propre « ref ». Les pointer sur « main » figeait le
+# socle à la version publiée, si bien qu'un gabarit et son socle pouvaient diverger
+# d'une étape, ce que GitLab signale par « chosen stage does not exist ».
 include:
-  - project: 'sr-media-ai/adsum/deployment/ci-templates'
-    ref: main
-    file:
-      - '/templates/base.yml'
-      - '/templates/security.yml'
+  - local: '/templates/base.yml'
+  - local: '/templates/security.yml'
 
 .python:
   image: python:3.11-slim
