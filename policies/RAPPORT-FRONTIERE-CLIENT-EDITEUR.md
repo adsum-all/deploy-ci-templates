@@ -285,7 +285,7 @@ inscrit ci-dessous en risque résiduel.
 
 | Suite | Résultat |
 |---|---|
-| `verifier_politiques.py` | 0 bloquant ; 4 vigilances, 24 interdictions non encore prouvées |
+| `verifier_politiques.py` | 0 bloquant ; 4 vigilances, 18 interdictions non encore prouvées sur 24 |
 | `adsum-api` : frontière et conformité | voir section 16 |
 | `adsum-commerce` : suite complète | voir section 16 |
 
@@ -323,7 +323,7 @@ manquante. Un test positif garantit qu'on ne prouve pas seulement qu'un mur refu
 | 9 | La passerelle authentifie ses appelants mais ne les **autorise** pas : un secret valide ouvre aussi la purge du registre | majeur |
 | 10 | `souscriptions()` est fail-open : liste vide vaut tout le catalogue, et toute exception vaut accès | majeur |
 | 11 | 12 des 15 rôles éditeur n'existent pas en code ; le modèle stocké n'a que deux niveaux | majeur |
-| 12 | 24 interdictions déclarées ne sont pas encore adossées à un test | majeur |
+| 12 | 18 interdictions déclarées sur 24 ne sont pas encore adossées à un test | majeur |
 | 13 | Le portail client et le site éditeur n'existent que sur disque | majeur |
 | 14 | Les pipelines ne peuvent pas devenir verts : minutes CI du groupe épuisées | majeur |
 
@@ -388,7 +388,7 @@ est l'abandon de la demande de fusion. En cas de fusion déjà faite :
 5. Cloisonner le stockage des pièces d'identité et des photos par organisation.
 6. Limiter le débit de `login-verify`.
 7. Autoriser, et pas seulement authentifier, les appelants de la passerelle.
-8. Écrire les 24 tests d'interdiction manquants et passer le validateur en `--strict`.
+8. Écrire les 18 tests d'interdiction manquants et passer le validateur en `--strict`.
 9. Mettre le portail client, le site et l'ordonnanceur sous contrôle de version.
 10. Implémenter les 12 rôles éditeur déclarés, ou réduire la déclaration à ce qui sera
     réellement tenu.
