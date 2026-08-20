@@ -25,6 +25,12 @@
 # des mises en ligne, le bouton de retour arrière, et la possibilité de protéger la
 # production pour que seule une personne autorisée puisse y pousser.
 
+# Les dépendances entre tâches sont déclarées facultatives. Une tâche de
+# déploiement web attend le build de la pile web, qu'un service Python n'a pas :
+# un besoin obligatoire vers une tâche absente ne fait pas échouer cette tâche, il
+# fait échouer le chargement de toute la configuration, et le message ne nomme que
+# le besoin, jamais la composition qui l'a rendu impossible.
+#
 # Le socle est inclus ici aussi. GitLab dédoublonne les inclusions, donc composer ce
 # gabarit avec une pile ne le charge qu'une fois. Sans cette ligne, utiliser
 # deploy.yml seul plaçait ses tâches dans des étapes inexistantes : un gabarit qui ne
@@ -106,7 +112,9 @@ deploy:recette:pages:
     url: https://$CI_COMMIT_REF_SLUG.$ADSUM_PROJET_PAGES.pages.dev
     on_stop: deploy:recette:arret
     auto_stop_in: 7 days
-  needs: ["build:application"]
+  needs:
+    - job: build:application
+      optional: true
   rules:
     - if: '$CI_MERGE_REQUEST_IID'
       exists: [package.json]
@@ -138,7 +146,9 @@ deploy:production:pages:
   environment:
     name: production
     url: https://$ADSUM_PROJET_PAGES.pages.dev
-  needs: ["build:application"]
+  needs:
+    - job: build:application
+      optional: true
   # Déclenchement manuel, depuis la branche par défaut uniquement. La mise en ligne
   # d'une application cliente n'est pas une conséquence automatique d'une fusion :
   # elle se décide, et elle se date.
@@ -171,7 +181,9 @@ deploy:production:service:
 
 verifier:sante:production:
   extends: .sonde-sante
-  needs: ["deploy:production:service"]
+  needs:
+    - job: deploy:production:service
+      optional: true
   environment:
     name: production
     action: verify
