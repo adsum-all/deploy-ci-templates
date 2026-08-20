@@ -1,0 +1,81 @@
+# Point d'entrée CI pour les applications mobiles ADSUM (Capacitor, Android et iOS).
+#
+# Les deux dépôts mobiles sont des coquilles Capacitor enveloppant l'espace membre
+# web. Ce qu'ils apportent en propre est mince, et ce qu'ils cassent quand ils
+# cassent est entier : une application publiée sur un magasin ne se corrige pas en
+# redéployant.
+#
+# Ce gabarit vérifie donc ce qui est vérifiable sans magasin ni certificat : la
+# cohérence de la configuration Capacitor, la construction du web embarqué, et la
+# synchronisation des plateformes. Il ne signe rien et ne publie rien.
+#
+# La signature et la publication ne figurent pas ici, et c'est délibéré. Elles
+# demandent des certificats Apple et un magasin de clés Android, qui sont des
+# secrets à longue vie dont la fuite ne se répare pas par une rotation. Les poser
+# dans une CI qui n'a pas encore d'exécuteur propre serait les exposer avant d'en
+# avoir besoin.
+
+include:
+  - local: '/templates/base.yml'
+  - local: '/templates/security.yml'
+
+.mobile:
+  image: node:20-alpine
+  interruptible: true
+  cache:
+    key:
+      files: [package-lock.json]
+    paths: [.npm]
+  before_script:
+    - npm ci --cache .npm --prefer-offline --no-fund --no-audit
+
+validate:capacitor:
+  stage: validate
+  image: node:20-alpine
+  script:
+    # Un identifiant d'application qui change entre deux versions produit une
+    # deuxième application sur le magasin plutôt qu'une mise à jour. Le vérifier
+    # coûte une seconde et évite une publication irrattrapable.
+    - |
+      set -eu
+      [ -f capacitor.config.ts ] || [ -f capacitor.config.json ] || {
+        echo "FAIL aucune configuration Capacitor trouvée"; exit 1; }
+      grep -qE 'appId' capacitor.config.* || {
+        echo "FAIL la configuration Capacitor ne déclare pas d'appId"; exit 1; }
+      echo "Configuration Capacitor présente et identifiée."
+  rules:
+    - exists: [capacitor.config.ts, capacitor.config.json]
+
+quality:lint:
+  extends: .mobile
+  stage: quality
+  script:
+    - npm run lint --if-present
+  rules:
+    - exists: [package.json]
+
+build:web-embarque:
+  extends: .mobile
+  stage: build
+  script:
+    # La coquille embarque un build web. S'il ne se construit pas, la synchronisation
+    # des plateformes copierait un dossier vide et l'application démarrerait sur un
+    # écran blanc, ce qui ne se voit qu'à l'ouverture sur un appareil.
+    - npm run build --if-present
+    - test -d dist || test -d www || {
+        echo "FAIL aucun dossier web construit (dist ou www)"; exit 1; }
+  artifacts:
+    expire_in: 7 days
+    paths: [dist, www]
+  rules:
+    - exists: [package.json]
+
+build:synchronisation:
+  extends: .mobile
+  stage: build
+  needs: ["build:web-embarque"]
+  script:
+    - npx --yes cap sync || {
+        echo "FAIL la synchronisation Capacitor a échoué"; exit 1; }
+  rules:
+    - exists: [capacitor.config.ts, capacitor.config.json]
