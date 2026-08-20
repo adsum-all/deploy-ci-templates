@@ -25,6 +25,13 @@
 # des mises en ligne, le bouton de retour arrière, et la possibilité de protéger la
 # production pour que seule une personne autorisée puisse y pousser.
 
+# Le socle est inclus ici aussi. GitLab dédoublonne les inclusions, donc composer ce
+# gabarit avec une pile ne le charge qu'une fois. Sans cette ligne, utiliser
+# deploy.yml seul plaçait ses tâches dans des étapes inexistantes : un gabarit qui ne
+# tient pas debout tout seul est un piège pour celui qui l'essaiera en premier.
+include:
+  - local: '/templates/base.yml'
+
 variables:
   # Combien de fois la sonde de santé est retentée avant de conclure à un échec.
   # Un service qui vient de démarrer répond souvent en erreur pendant quelques
