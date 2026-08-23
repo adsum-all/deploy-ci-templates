@@ -144,6 +144,7 @@ n'énumère que ses réussites ne sert à personne.
 | `only_allow_merge_if_pipeline_succeeds` désactivé sur 93 projets | Une fusion peut passer sans vérification | À activer **après** que les pipelines puissent aboutir, sinon plus rien ne fusionne |
 | Console éditeur rangée avec les applications clientes | Confusion de lecture, pas de faille | Migration de sous-groupe avec mise à jour des références |
 | `adsum-commerce` vide sur GitLab | Le service le plus commercial n'est pas versionné | Rattacher le dépôt local à son projet |
+| `adsum-portail`, `adsum-site`, `scheduler-cron` sans projet GitLab | Versionnés en local depuis le 20 août, mais sans distant | Créer les trois projets et rattacher |
 | Environnements GitLab non déclarés | Pas de protection ni d'historique de déploiement | Déclarer staging et production une fois la CI opérationnelle |
 
 ### Le quota, daté
@@ -213,3 +214,25 @@ héritent donc de la chaîne sans aucune modification chez eux.
 | `stack-web.yml` | adsum-console | 16 |
 | `stack-python-service.yml` | adsum-api | 16 |
 | `stack-docs.yml` | adsum-design | 13 |
+
+
+## 10. Dépôts mis sous contrôle de version le 20 août 2026
+
+Trois dossiers actifs n'étaient dans aucun dépôt git. Ils le sont désormais, en local,
+avec un `.gitignore` et une CI déclarée. Il leur manque un projet GitLab.
+
+| Dossier | Ce qu'il porte | Pourquoi c'était grave |
+|---|---|---|
+| `applications/adsum-portail` | Connexion et parcours de paiement d'une organisation cliente | Une régression ou une exfiltration n'aurait été ni traçable ni annulable |
+| `applications/adsum-site` | Site d'entreprise de l'éditeur, sept pages publiques | Du texte public livré sans historique est du texte dont personne ne peut prouver la relecture |
+| `deployment/scheduler-cron` | Worker Cloudflare appelant la production toutes les cinq minutes | Personne ne pouvait le relire, le réviser ni le restaurer |
+
+### Un échec silencieux corrigé au passage
+
+L'ordonnanceur n'examinait jamais la réponse de son appel. Un `fetch` qui rend 401 est
+une promesse tenue, pas une erreur : le jour où `CRON_SECRET` tourne, l'appel
+continuait de partir, le journal écrivait « Unauthorized », et la diffusion des
+sondages s'arrêtait sans que rien ne le signale. Le statut est désormais vérifié,
+l'erreur est journalisée au niveau erreur et relancée pour que Cloudflare compte
+l'exécution en échec. Sans cette dernière partie, le tableau de bord affiche cent pour
+cent de réussite pendant que rien ne part.
